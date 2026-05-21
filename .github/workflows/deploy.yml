@@ -54,6 +54,12 @@ jobs:
             cp "src/store/grocery-store.ts" /tmp/mirror-owned/store/grocery-store.ts
           fi
 
+          # Backup db/client.ts
+          if [ -f "src/lib/server/db/client.ts" ]; then
+            mkdir -p /tmp/mirror-owned/server
+            cp "src/lib/server/db/client.ts" /tmp/mirror-owned/server/client.ts
+          fi
+
           # Backup wrangler.toml
           if [ -f "wrangler.toml" ]; then
             cp "wrangler.toml" /tmp/mirror-owned/wrangler.toml
@@ -103,6 +109,12 @@ jobs:
           if [ -f /tmp/mirror-owned/store/grocery-store.ts ]; then
             mkdir -p src/store
             cp /tmp/mirror-owned/store/grocery-store.ts src/store/grocery-store.ts
+          fi
+
+          # Restore client.ts
+          if [ -f /tmp/mirror-owned/server/client.ts ]; then
+            mkdir -p src/lib/server/db
+            cp /tmp/mirror-owned/store/client.ts src/lib/server/db/client.ts
           fi
 
           # Restore wrangler.toml
