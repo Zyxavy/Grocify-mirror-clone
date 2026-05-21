@@ -1,0 +1,219 @@
+name: Sync from Instructor Repo
+
+on:
+  repository_dispatch:
+    types: [production-updated]
+  workflow_dispatch:
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout Mirror Repo
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.PAT_TOKEN }}
+          fetch-depth: 0
+
+      - name: Backup mirror-owned files
+        run: |
+          mkdir -p /tmp/mirror-owned
+
+          cp -r .github /tmp/mirror-owned/github
+
+          # Backup metro config (mirror owns this)
+          cp metro.config.js /tmp/mirror-owned/metro.config.js
+
+          # Backup shims dir
+          if [ -d "src/shims" ]; then
+            cp -r src/shims /tmp/mirror-owned/shims
+          fi
+
+          # Backup .web.tsx files
+          find src -type f \( -name "*.web.ts" -o -name "*.web.tsx" \) | while read f; do
+            mkdir -p "$(dirname "/tmp/mirror-owned/webfiles/$f")"
+            cp "$f" "/tmp/mirror-owned/webfiles/$f"
+          done
+
+          # Backup sso-callback
+          if [ -f "src/app/(auth)/sso-callback.tsx" ]; then
+            mkdir -p /tmp/mirror-owned/auth
+            cp "src/app/(auth)/sso-callback.tsx" /tmp/mirror-owned/auth/sso-callback.tsx
+          fi
+
+          # Backup (tabs)_layout
+          if [ -f "src/app/(tabs)/_layout.web.tsx" ]; then
+            cp "src/app/(tabs)/_layout.web.tsx" /tmp/mirror-owned/_layout.web.tsx
+          fi
+
+      - name: Pull Latest from Instructor Production
+        run: |
+          git remote add instructor https://github.com/Canatoy/IT-2C_CS-Grocify || true
+          git fetch instructor Production
+          git reset --hard instructor/Production
+
+      - name: Restore mirror-owned files
+        run: |
+          rm -rf .github
+          cp -r /tmp/mirror-owned/github .github
+
+          # Restore metro config
+          cp /tmp/mirror-owned/metro.config.js metro.config.js
+
+          # Restore shims
+          if [ -d /tmp/mirror-owned/shims ]; then
+            mkdir -p src/shims
+            cp -r /tmp/mirror-owned/shims/. src/shims/
+          fi
+
+          # Restore .web.tsx files
+          if [ -d /tmp/mirror-owned/webfiles/src ]; then
+            find /tmp/mirror-owned/webfiles/src -type f | while read f; do
+              original="${f#/tmp/mirror-owned/webfiles/}"
+              mkdir -p "$(dirname "$original")"
+              cp "$f" "$original"
+            done
+          fi
+
+          # Restore sso-callback
+          if [ -f /tmp/mirror-owned/auth/sso-callback.tsx ]; then
+            mkdir -p "src/app/(auth)"
+            cp /tmp/mirror-owned/auth/sso-callback.tsx "src/app/(auth)/sso-callback.tsx"
+          fi
+
+          # Restore (tabs)/_layout
+          if [ -f /tmp/mirror-owned/_layout.web.tsx ]; then
+            cp /tmp/mirror-owned/_layout.web.tsx "src/app/(tabs)/_layout.web.tsx"
+          fi
+
+      - name: Write metro.config.js with web aliases
+        run: |
+          cat > metro.config.js << 'EOF'
+          const { getDefaultConfig } = require("expo/metro-config");
+          const { withNativeWind } = require('nativewind/metro');
+          const path = require('path');
+
+          const config = getDefaultConfig(__dirname);
+
+          config.resolver = config.resolver || {};
+          config.resolver.resolveRequest = (context, moduleName, platform) => {
+            if (platform === 'web') {
+              const webAliases = {
+                '@clerk/expo/native': path.resolve(__dirname, 'src/shims/clerk-native-shim.js'),
+              };
+
+              if (webAliases[moduleName]) {
+                return {
+                  filePath: webAliases[moduleName],
+                  type: 'sourceFile',
+                };
+              }
+            }
+
+            return context.resolveRequest(context, moduleName, platform);
+          };
+
+          module.exports = withNativeWind(config, { input: './global.css' });
+          EOF
+
+          echo "metro.config.js written."
+
+      - name: Write web shims (always, not from backup)
+        run: |
+          mkdir -p src/shims
+          
+          cat > src/shims/clerk-native-shim.js << 'EOF'
+          // Web shim for @clerk/expo/native
+          // Metro resolves this instead of the native module on web
+          export default {}
+          EOF
+
+          echo "Shim written."
+
+      - name: Ensure web shims exist (create if missing)
+        run: |
+          # (tabs)/index.web.tsx — always enforce this exists
+          mkdir -p src/app/\(tabs\)
+          cat > "src/app/(tabs)/index.web.tsx" << 'EOF'
+          import CompletedItems from '@/components/list/CompletedItems'
+          import ListHeroCard from '@/components/list/ListHeroCard'
+          import PendingItemCard from '@/components/list/PendingItemCard'
+          import TabScreenBackground from '@/components/TabScreenBackground'
+          import { useGroceryStore } from '@/store/grocery-store'
+          import { useEffect } from 'react'
+          import { FlatList, Text, View } from 'react-native'
+
+          export default function ListScreen() {
+            const { items, loadItems } = useGroceryStore();
+            const pendingItems = items.filter((item) => !item.purchased);
+
+            useEffect(() => {
+              loadItems();
+            }, []);
+
+            return (
+              <FlatList
+                className="flex-1 bg-background"
+                data={pendingItems}
+                keyExtractor={(item) => item.id}
+                renderItem={({ item }) => <PendingItemCard item={item} />}
+                contentContainerStyle={{ padding: 20, gap: 14 }}
+                ListHeaderComponent={
+                  <View style={{ gap: 14, paddingTop: 20 }}>
+                    <TabScreenBackground />
+                    <ListHeroCard />
+                    <View className="flex-row items-center justify-between px-1">
+                      <Text className="text-sm font-semibold uppercase tracking-[1px] text-muted-foreground">
+                        Shopping items
+                      </Text>
+                      <Text className="text-sm text-muted-foreground">{pendingItems.length} active</Text>
+                    </View>
+                  </View>
+                }
+                ListFooterComponent={<CompletedItems />}
+              />
+            );
+          }
+          EOF
+          echo "Shim written: src/app/(tabs)/index.web.tsx"
+
+      - name: Strip native-only imports from .tsx files (fallback patch)
+        run: |
+          NATIVE_PATTERNS=(
+            "@clerk/expo/native"
+          )
+
+          for pattern in "${NATIVE_PATTERNS[@]}"; do
+            grep -rl "$pattern" src/ \
+              --include="*.ts" \
+              --include="*.tsx" \
+              ! -name "*.web.ts" \
+              ! -name "*.web.tsx" | while read file; do
+              echo "Stripping '$pattern' from $file"
+              sed -i "/import.*${pattern}/d" "$file"
+            done
+          done
+
+      - name: Patch bad reanimated internal import
+        run: |
+          find src -name "*.tsx" -o -name "*.ts" | xargs grep -l \
+            "react-native-reanimated/lib/typescript/Animated" | while read file; do
+            echo "Patching bad reanimated import in $file"
+            sed -i "s|from 'react-native-reanimated/lib/typescript/Animated'|from 'react-native-reanimated'|g" "$file"
+          done
+
+      - name: Force SPA mode
+        run: |
+          sudo apt-get install -y jq
+          jq '.expo.web = {"bundler": "metro", "output": "single"}' app.json > app.json.tmp
+          mv app.json.tmp app.json
+
+      - name: Commit and Push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit --allow-empty -m "sync: update from instructor Production + restore web shims"
+          git push https://x-access-token:${{ secrets.PAT_TOKEN }}@github.com/Zyxavy/Grocify-mirror-clone.git HEAD:main --force
