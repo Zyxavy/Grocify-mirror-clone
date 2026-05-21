@@ -3,7 +3,7 @@ import { create } from "zustand";
 export type GroceryCategory = "Produce" | "Dairy" | "Bakery" | "Pantry" | "Snacks";
 export type GroceryPriority = "low" | "medium" | "high";
 
-const API_BASE = process.env.EXPO_PUBLIC_API_URL ?? "";
+const API_BASE = "https://grocify-api.kelpselp.workers.dev";
 
 export type GroceryItem = {
   id: string;
