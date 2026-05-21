@@ -37,15 +37,26 @@ jobs:
             cp "$f" "/tmp/mirror-owned/webfiles/$f"
           done
 
-          # Backup sso-callback
-          if [ -f "src/app/(auth)/sso-callback.tsx" ]; then
-            mkdir -p /tmp/mirror-owned/auth
-            cp "src/app/(auth)/sso-callback.tsx" /tmp/mirror-owned/auth/sso-callback.tsx
-          fi
-
-          # Backup (tabs)_layout
+          # Backup (tabs)/_layout.web.tsx
           if [ -f "src/app/(tabs)/_layout.web.tsx" ]; then
             cp "src/app/(tabs)/_layout.web.tsx" /tmp/mirror-owned/_layout.web.tsx
+          fi
+
+          # Backup worker/index.ts
+          if [ -f "worker/index.ts" ]; then
+            mkdir -p /tmp/mirror-owned/worker
+            cp "worker/index.ts" /tmp/mirror-owned/worker/index.ts
+          fi
+
+          # Backup grocery-store
+          if [ -f "src/store/grocery-store.ts" ]; then
+            mkdir -p /tmp/mirror-owned/store
+            cp "src/store/grocery-store.ts" /tmp/mirror-owned/store/grocery-store.ts
+          fi
+
+          # Backup wrangler.toml
+          if [ -f "wrangler.toml" ]; then
+            cp "wrangler.toml" /tmp/mirror-owned/wrangler.toml
           fi
 
       - name: Pull Latest from Instructor Production
@@ -77,15 +88,26 @@ jobs:
             done
           fi
 
-          # Restore sso-callback
-          if [ -f /tmp/mirror-owned/auth/sso-callback.tsx ]; then
-            mkdir -p "src/app/(auth)"
-            cp /tmp/mirror-owned/auth/sso-callback.tsx "src/app/(auth)/sso-callback.tsx"
-          fi
-
-          # Restore (tabs)/_layout
+          # Restore (tabs)/_layout.web.tsx
           if [ -f /tmp/mirror-owned/_layout.web.tsx ]; then
             cp /tmp/mirror-owned/_layout.web.tsx "src/app/(tabs)/_layout.web.tsx"
+          fi
+
+          # Restore worker/index.ts
+          if [ -f /tmp/mirror-owned/worker/index.ts ]; then
+            mkdir -p worker
+            cp /tmp/mirror-owned/worker/index.ts worker/index.ts
+          fi
+
+          # Restore grocery-store
+          if [ -f /tmp/mirror-owned/store/grocery-store.ts ]; then
+            mkdir -p src/store
+            cp /tmp/mirror-owned/store/grocery-store.ts src/store/grocery-store.ts
+          fi
+
+          # Restore wrangler.toml
+          if [ -f /tmp/mirror-owned/wrangler.toml ]; then
+            cp /tmp/mirror-owned/wrangler.toml wrangler.toml
           fi
 
       - name: Write metro.config.js with web aliases

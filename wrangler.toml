@@ -1,0 +1,6 @@
+name = "grocify-api"
+main = "worker/index.ts"
+compatibility_date = "2024-01-01"
+
+[vars]
+DATABASE_URL = "postgresql://neondb_owner:npg_6mZVDi8sKQxk@ep-hidden-bread-ao7k43ch-pooler.c-2.ap-southeast-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require"
